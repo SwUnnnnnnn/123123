@@ -193,29 +193,56 @@ service cloud.firestore {
       allow update: if signedIn()
         && request.auth.uid in resource.data.members
         && request.resource.data.members == resource.data.members
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'lastMessage', 'lastMessageAt', 'lastMessageSender', 'lastMessageId'
-        ])
-        && request.resource.data.lastMessage is string
-        && request.resource.data.lastMessage.size() > 0
-        && request.resource.data.lastMessage.size() <= 4000
-        && request.resource.data.lastMessageSender == request.auth.uid
-        && request.resource.data.lastMessageAt == request.time
-        && request.resource.data.lastMessageId is string
-        && request.resource.data.lastMessageId.size() > 0
-        && getAfter(/databases/$(database)/documents/chats/$(chatId)/messages/$(request.resource.data.lastMessageId)).data.senderId == request.auth.uid
-        && getAfter(/databases/$(database)/documents/chats/$(chatId)/messages/$(request.resource.data.lastMessageId)).data.text == request.resource.data.lastMessage
-        && getAfter(/databases/$(database)/documents/chats/$(chatId)/messages/$(request.resource.data.lastMessageId)).data.createdAt == request.time
-        && areFriends(resource.data.members[0], resource.data.members[1])
-        && !isBlocked(resource.data.members[0], resource.data.members[1])
-        && !isBlocked(resource.data.members[1], resource.data.members[0]);
+        && (
+          (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'lastMessage', 'lastMessageAt', 'lastMessageSender', 'lastMessageId'
+            ])
+            && request.resource.data.lastMessage is string
+            && request.resource.data.lastMessage.size() > 0
+            && request.resource.data.lastMessage.size() <= 4000
+            && request.resource.data.lastMessageSender == request.auth.uid
+            && request.resource.data.lastMessageAt == request.time
+            && request.resource.data.lastMessageId is string
+            && request.resource.data.lastMessageId.size() > 0
+            && getAfter(/databases/$(database)/documents/chats/$(chatId)/messages/$(request.resource.data.lastMessageId)).data.senderId == request.auth.uid
+            && getAfter(/databases/$(database)/documents/chats/$(chatId)/messages/$(request.resource.data.lastMessageId)).data.text == request.resource.data.lastMessage
+            && getAfter(/databases/$(database)/documents/chats/$(chatId)/messages/$(request.resource.data.lastMessageId)).data.createdAt == request.time
+            && areFriends(resource.data.members[0], resource.data.members[1])
+            && !isBlocked(resource.data.members[0], resource.data.members[1])
+            && !isBlocked(resource.data.members[1], resource.data.members[0])
+          )
+          || (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage'])
+            && request.resource.data.lastMessage == 'Сообщение удалено'
+            && request.resource.data.lastMessageId == resource.data.lastMessageId
+            && request.resource.data.lastMessageAt == resource.data.lastMessageAt
+            && request.resource.data.lastMessageSender == resource.data.lastMessageSender
+            && resource.data.lastMessageSender == request.auth.uid
+            && !existsAfter(
+              /databases/$(database)/documents/chats/$(chatId)/messages/$(resource.data.lastMessageId)
+            )
+          )
+        );
       allow delete: if false;
 
       match /messages/{messageId} {
         allow read: if isChatMember(chatId);
         allow create: if isChatMember(chatId)
           && request.resource.data.keys().hasAll(['senderId', 'text', 'createdAt'])
-          && request.resource.data.keys().hasOnly(['senderId', 'text', 'createdAt'])
+          && (
+            request.resource.data.keys().hasOnly(['senderId', 'text', 'createdAt'])
+            || (
+              request.resource.data.keys().hasOnly([
+                'senderId', 'text', 'createdAt', 'audioData', 'audioType'
+              ])
+              && request.resource.data.text == '[Голосовое сообщение]'
+              && request.resource.data.audioData is string
+              && request.resource.data.audioData.size() <= 650000
+              && request.resource.data.audioType in ['audio/webm', 'audio/ogg', 'audio/mp4']
+              && request.resource.data.audioData.matches('^data:audio/(webm|ogg|mp4);base64,[A-Za-z0-9+/]+=*$')
+            )
+          )
           && request.resource.data.senderId == request.auth.uid
           && request.resource.data.text is string
           && request.resource.data.text.size() > 0
@@ -237,7 +264,33 @@ service cloud.firestore {
             get(/databases/$(database)/documents/chats/$(chatId)).data.members[1],
             get(/databases/$(database)/documents/chats/$(chatId)).data.members[0]
           );
-        allow update, delete: if false;
+        allow update: if isChatMember(chatId)
+          && (
+            (
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deletedFor'])
+              && request.resource.data.deletedFor is list
+              && request.resource.data.deletedFor.size() <= 2
+              && request.auth.uid in request.resource.data.deletedFor
+              && (!('deletedFor' in resource.data)
+                || request.resource.data.deletedFor.hasAll(resource.data.deletedFor))
+              && (
+                (!('deletedFor' in resource.data)
+                  && request.resource.data.deletedFor.size() == 1)
+                || ('deletedFor' in resource.data
+                  && request.auth.uid in resource.data.deletedFor
+                  && request.resource.data.deletedFor.size() == resource.data.deletedFor.size())
+                || ('deletedFor' in resource.data
+                  && request.auth.uid in request.resource.data.deletedFor
+                  && !(request.auth.uid in resource.data.deletedFor)
+                  && request.resource.data.deletedFor.size() == resource.data.deletedFor.size() + 1)
+              )
+              && request.resource.data.deletedFor.hasOnly(
+                get(/databases/$(database)/documents/chats/$(chatId)).data.members
+              )
+            )
+          );
+        allow delete: if isChatMember(chatId)
+          && resource.data.senderId == request.auth.uid;
       }
     }
 
@@ -250,13 +303,15 @@ service cloud.firestore {
           'muted', 'pinned', 'archived', 'hidden', 'updatedAt'
         ])
         && request.resource.data.keys().hasOnly([
-          'muted', 'pinned', 'archived', 'hidden', 'lastReadAt', 'updatedAt'
+          'muted', 'pinned', 'archived', 'hidden', 'lastReadAt', 'hiddenLastMessageId', 'updatedAt'
         ])
         && request.resource.data.muted is bool
         && request.resource.data.pinned is bool
         && request.resource.data.archived is bool
         && request.resource.data.hidden is bool
         && (!('lastReadAt' in request.resource.data) || request.resource.data.lastReadAt is timestamp)
+        && (!('hiddenLastMessageId' in request.resource.data)
+          || request.resource.data.hiddenLastMessageId is string)
         && request.resource.data.updatedAt == request.time;
       allow delete: if signedIn() && request.auth.uid == userId;
     }

@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Крутое название — профиль, лента, сообщения, друзья и сообщества." />
-    <title>Крутое название</title>
+    <meta name="description" content="ATOM — профиль, лента, сообщения, друзья и сообщества." />
+    <title>ATOM</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -12,7 +12,7 @@
   </head>
   <body class="auth-pending">
     <header class="topbar">
-      <a class="brand" href="site.html" aria-label="Крутое название — главная">Крутое название</a>
+      <a class="brand" href="site.html" aria-label="ATOM — главная">ATOM</a>
       <label class="search-box">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m16 16 4 4"></path></svg>
         <input id="global-search" type="search" placeholder="Поиск" aria-label="Поиск" />
@@ -128,9 +128,14 @@
                 </header>
                 <div class="messages" id="chat-messages" aria-live="polite"></div>
                 <form class="message-form" id="chat-message-form">
+                  <button class="message-tool-button" id="chat-emoji-toggle" type="button" aria-label="Открыть панель эмодзи" aria-expanded="false" aria-controls="chat-emoji-picker" title="Эмодзи">☺</button>
+                  <div class="emoji-picker-popover" id="chat-emoji-picker" hidden></div>
                   <input id="chat-message-input" name="message" maxlength="4000" autocomplete="off" placeholder="Напиши сообщение…" aria-label="Текст сообщения" required />
+                  <button class="message-tool-button voice-record-button" id="chat-voice-record" type="button" aria-label="Записать голосовое сообщение" title="Записать голосовое сообщение">🎙</button>
+                  <button class="message-tool-button voice-record-stop" id="chat-voice-stop" type="button" aria-label="Остановить и отправить запись" title="Остановить и отправить запись" hidden>■</button>
                   <button class="send-button" type="submit" aria-label="Отправить сообщение">➤</button>
                 </form>
+                <p class="voice-recording-status" id="chat-voice-status" role="status" aria-live="polite" hidden></p>
               </div>
             </section>
           </div>
@@ -138,7 +143,7 @@
 
         <section class="view-panel" data-panel="friends">
           <div class="page-heading"><div><span class="eyebrow">ТВОЙ КРУГ</span><h1>Друзья</h1></div><button class="outline-button" id="find-friends-button" type="button">Найти друзей</button></div>
-          <div class="card friend-toolbar"><strong>Пользователи Крутое название <span class="subtle-count" id="registered-users-count">0</span></strong><span id="friends-status">Загружаем пользователей…</span></div>
+          <div class="card friend-toolbar"><strong>Пользователи ATOM <span class="subtle-count" id="registered-users-count">0</span></strong><span id="friends-status">Загружаем пользователей…</span></div>
           <div class="people-grid" id="registered-users-list"></div>
         </section>
 
@@ -164,13 +169,53 @@
         </section>
 
         <section class="view-panel" data-panel="music">
-          <div class="page-heading"><div><span class="eyebrow">ТВОЙ ЗВУК</span><h1>Музыка</h1></div><button class="outline-button" type="button" data-notice="Загрузка музыки пока недоступна.">＋ Добавить музыку</button></div>
-          <article class="music-hero"><div><span class="eyebrow">ПОДБОРКА ДЛЯ ТЕБЯ</span><h2>Поймай свой ритм</h2><p>Немного музыки для хорошего дня.</p><button class="light-button" type="button" data-play-all>▶ Слушать подборку</button></div><div class="music-orb">♫</div></article>
-          <div class="card tracks-card"><div class="card-heading"><h2>Популярное</h2><span class="subtle-count">Подборка Крутое название</span></div>
-            <ul class="track-list" id="track-list"><li class="empty-state">Пока нет треков. Когда треки появятся, они будут здесь.</li></ul>
+          <div class="page-heading"><div><span class="eyebrow">ТВОЙ ЗВУК</span><h1>Музыка</h1></div><details class="music-connection">
+            <summary class="outline-button">Настроить каталог</summary>
+            <form class="music-connection-form" id="music-connection-form">
+              <p>Создай API-ключ в <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer">Google Cloud Console</a>, включи YouTube Data API v3 и ограничь ключ HTTP-адресом своего сайта и этим API. Ключ сохранится только в этом браузере. Поиск расходует квоту Google API.</p>
+              <label for="youtube-api-key">YouTube Data API key</label>
+              <div><input id="youtube-api-key" name="apiKey" type="password" placeholder="Вставь API key" autocomplete="off" spellcheck="false" required /><button class="primary-button" type="submit">Подключить</button></div>
+            </form>
+          </details></div>
+          <div class="music-content-grid">
+            <form class="music-search" id="music-search-form" role="search">
+              <label for="music-search-input">Поиск на YouTube</label>
+              <div><input id="music-search-input" type="search" placeholder="Название трека или исполнитель" autocomplete="off" /><button class="primary-button" type="submit">Найти</button></div>
+            </form>
+            <div class="music-sidebar-stack">
+              <section class="card youtube-player-card" aria-label="YouTube-плеер">
+                <div class="youtube-player-placeholder" id="youtube-player-placeholder">Выбери видео в результатах поиска, чтобы начать прослушивание.</div>
+                <div id="youtube-player" hidden></div>
+              </section>
+              <section class="card user-playlists-card" aria-labelledby="music-playlists-title">
+                <div class="card-heading"><h2 id="music-playlists-title">Мои плейлисты</h2><button class="outline-button" id="playlist-create-open" type="button">＋ Создать</button></div>
+                <div class="user-playlists-list" id="user-playlists-list"><div class="empty-state">Пока нет плейлистов. Добавляй видео из результатов поиска.</div></div>
+              </section>
+            </div>
+            <div class="card tracks-card"><div class="card-heading"><h2>Результаты YouTube</h2><span class="subtle-count" id="music-results-count"></span></div>
+              <ul class="track-list" id="track-list" aria-live="polite"><li class="empty-state">Настрой YouTube API, чтобы искать видео.</li></ul>
+            </div>
+            <p class="music-attribution">Воспроизведение предоставляется YouTube. Доступность и ограничения роликов определяются авторами и YouTube.</p>
           </div>
-          <div class="music-player"><button class="player-button" id="player-toggle" type="button" aria-label="Воспроизвести">▶</button><div class="player-track"><strong id="now-playing">Выбери трек</strong><div class="progress"><span id="progress-bar"></span></div></div><span class="player-time">0:00</span><span class="volume-mark">◖))</span></div>
         </section>
+        <dialog class="profile-edit-dialog playlist-dialog" id="playlist-dialog" aria-labelledby="playlist-dialog-title">
+          <div class="profile-edit-dialog-heading">
+            <div><span class="eyebrow">ТВОЯ МУЗЫКА</span><h2 id="playlist-dialog-title">Добавить в плейлист</h2></div>
+            <button class="square-button" id="playlist-dialog-close" type="button" aria-label="Закрыть">×</button>
+          </div>
+          <form id="playlist-form">
+            <fieldset class="playlist-choices" id="playlist-choices">
+              <legend>Выбери существующий плейлист</legend>
+              <div id="playlist-choice-list"></div>
+            </fieldset>
+            <label class="profile-edit-field" for="playlist-name">Или создай новый плейлист<input id="playlist-name" name="playlistName" type="text" maxlength="40" autocomplete="off" placeholder="Например, Любимые треки" /></label>
+            <p class="profile-edit-message" id="playlist-form-message" role="status" aria-live="polite" hidden></p>
+            <div class="profile-edit-actions">
+              <button class="outline-button" id="playlist-dialog-cancel" type="button">Отмена</button>
+              <button class="primary-button" id="playlist-submit" type="submit">Создать плейлист</button>
+            </div>
+          </form>
+        </dialog>
         <dialog class="profile-edit-dialog" id="profile-edit-dialog" aria-labelledby="profile-edit-title">
           <div class="profile-edit-dialog-heading">
             <div><span class="eyebrow">НАСТРОЙКИ ПРОФИЛЯ</span><h2 id="profile-edit-title">Редактировать профиль</h2></div>
@@ -190,6 +235,16 @@
         </dialog>
         <div class="toast" id="toast" role="status" aria-live="polite"></div>
       </main>
+      <div class="music-transport" id="music-transport" aria-label="Управление воспроизведением" hidden>
+        <div class="transport-track"><strong id="transport-title">Выбери видео из списка</strong><small id="transport-channel">YouTube Music</small></div>
+        <div class="transport-controls">
+          <button class="transport-button" id="music-previous" type="button" aria-label="Предыдущий трек" title="Предыдущий трек" disabled>⏮</button>
+          <button class="transport-button transport-play-button" id="music-play-pause" type="button" aria-label="Воспроизвести" title="Воспроизвести" disabled>▶</button>
+          <button class="transport-button" id="music-next" type="button" aria-label="Следующий трек" title="Следующий трек" disabled>⏭</button>
+          <button class="transport-button" id="music-repeat" type="button" aria-label="Повтор списка выключен" title="Повтор списка выключен" aria-pressed="false" disabled>🔁</button>
+          <label class="transport-volume" for="music-volume"><span aria-hidden="true">◖))</span><input id="music-volume" type="range" min="0" max="100" value="70" aria-label="Громкость" /></label>
+        </div>
+      </div>
     </div>
     <div class="auth-status" id="auth-status" role="status" aria-live="polite" hidden></div>
     <script type="module" src="js/site.js"></script>

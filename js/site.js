@@ -27,6 +27,7 @@ document.documentElement.dataset.theme = initialTheme;
 const navItems = [...document.querySelectorAll('.nav-item[data-view]')];
 const panels = [...document.querySelectorAll('.view-panel[data-panel]')];
 const mobileView = document.querySelector('#mobile-view');
+const musicTransport = document.querySelector('#music-transport');
 const toast = document.querySelector('#toast');
 const accountMenu = document.querySelector('.account-menu');
 const accountMenuToggle = document.querySelector('#account-menu-toggle');
@@ -49,6 +50,11 @@ const conversationContent = document.querySelector('#conversation-content');
 const chatMessages = document.querySelector('#chat-messages');
 const chatMessageForm = document.querySelector('#chat-message-form');
 const chatMessageInput = document.querySelector('#chat-message-input');
+const chatEmojiToggle = document.querySelector('#chat-emoji-toggle');
+const chatEmojiPicker = document.querySelector('#chat-emoji-picker');
+const voiceRecordButton = document.querySelector('#chat-voice-record');
+const voiceStopButton = document.querySelector('#chat-voice-stop');
+const voiceRecordingStatus = document.querySelector('#chat-voice-status');
 const profileMessageButton = document.querySelector('#public-profile-message');
 const profileBlockButton = document.querySelector('#public-profile-block');
 const profileEditDialog = document.querySelector('#profile-edit-dialog');
@@ -90,6 +96,18 @@ let stopWatchingMessages;
 let stopWatchingUsers;
 let stopWatchingIncomingRequests;
 let stopWatchingOutgoingRequests;
+let musicCatalogLoaded = false;
+let emojiPickerLoadPromise;
+let voiceRecorder;
+let voiceRecorderStream;
+let voiceRecordingChunks = [];
+let voiceRecordingChatId = '';
+let voiceRecordingCancelled = false;
+let voiceRecordingTimeout;
+let voiceRecordingTimer;
+let voiceRecordingStartedAt = 0;
+
+document.addEventListener('contextmenu', (event) => event.preventDefault());
 
 function showView(viewName) {
   const target = panels.find((panel) => panel.dataset.panel === viewName);
@@ -104,6 +122,10 @@ function showView(viewName) {
   });
 
   if (mobileView) mobileView.value = viewName;
+  musicTransport.hidden = viewName !== 'music';
+  if (viewName === 'music' && !musicCatalogLoaded) {
+    searchYouTubeVideos('music', 'relevance');
+  }
 }
 
 function showToast(message) {
@@ -191,7 +213,8 @@ function getCurrentChatSettings(chatId) {
     muted: false,
     pinned: false,
     archived: false,
-    hidden: false
+    hidden: false,
+    hiddenLastMessageId: ''
   };
 }
 
@@ -206,20 +229,24 @@ function renderChatList() {
         : !settings.archived && !settings.hidden && !blockedUserIds.has(otherUserId);
     })
     .map((chat) => {
+      const settings = getCurrentChatSettings(chat.id);
       const otherUserId = chat.members.find((memberId) => memberId !== currentUser.uid);
       const profile = getProfileById(otherUserId);
       const name = profile?.fullName || 'Пользователь';
-      const matchesSearch = `${name} ${profile?.nickname || ''} ${chat.lastMessage || ''}`
+      const preview = settings.hiddenLastMessageId === chat.lastMessageId
+        ? 'Сообщение удалено у вас'
+        : chat.lastMessage || '';
+      const matchesSearch = `${name} ${profile?.nickname || ''} ${preview}`
         .toLocaleLowerCase('ru')
         .includes(searchTerm);
-      return { chat, profile, name, matchesSearch, settings: getCurrentChatSettings(chat.id) };
+      return { chat, profile, name, preview, matchesSearch, settings };
     })
     .filter((entry) => entry.matchesSearch)
     .sort((first, second) => Number(second.settings.pinned) - Number(first.settings.pinned)
       || getTimestampValue(second.chat.lastMessageAt) - getTimestampValue(first.chat.lastMessageAt));
 
   chatItems.replaceChildren();
-  visibleChats.forEach(({ chat, profile, name, settings }) => {
+  visibleChats.forEach(({ chat, profile, name, preview, settings }) => {
     const row = document.createElement('div');
     row.className = 'chat-row';
     const button = document.createElement('button');
@@ -234,7 +261,7 @@ function renderChatList() {
     }
     const details = document.createElement('span');
     appendTextElement(details, 'strong', '', `${settings.pinned ? '📌 ' : ''}${settings.muted ? '🔕 ' : ''}${name}`);
-    appendTextElement(details, 'small', '', chat.lastMessage || 'Начни переписку');
+    appendTextElement(details, 'small', '', preview || 'Начни переписку');
     button.append(details);
     if (chat.lastMessageAt) {
       const time = appendTextElement(button, 'time', '', new Date(getTimestampValue(chat.lastMessageAt)).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' }));
@@ -333,20 +360,170 @@ async function handleChatMenuAction(chatId, action) {
 
 function renderChatMessages(messages) {
   chatMessages.replaceChildren();
-  if (!messages.length) {
+  const visibleMessages = messages.filter((message) => !message.deletedFor?.includes(currentUser.uid));
+  if (!visibleMessages.length) {
     appendTextElement(chatMessages, 'div', 'messages-empty', 'Сообщений пока нет. Напиши первым!');
     return;
   }
-  messages.forEach((message) => {
-    const bubble = appendTextElement(chatMessages, 'p',
+  visibleMessages.forEach((message) => {
+    const bubble = appendTextElement(chatMessages, 'article',
       `bubble${message.senderId === currentUser.uid ? ' bubble--outgoing' : ' bubble--incoming'}`,
-      message.text);
+      '');
+    if (message.audioData && !message.deleted) {
+      bubble.append(createVoiceMessagePlayer(message.audioData));
+    } else {
+      appendTextElement(bubble, 'span', 'bubble-text', message.deleted ? 'Сообщение удалено' : message.text);
+    }
     if (message.createdAt) {
       const time = appendTextElement(bubble, 'time', '', new Date(getTimestampValue(message.createdAt)).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' }));
       time.dateTime = new Date(getTimestampValue(message.createdAt)).toISOString();
     }
+    if (!message.deleted) {
+      const chatId = selectedChatId;
+      const actions = appendTextElement(bubble, 'details', 'message-actions', '');
+      const summary = appendTextElement(actions, 'summary', '', '⋯');
+      summary.setAttribute('aria-label', 'Действия с сообщением');
+      const hideButton = appendTextElement(actions, 'button', '', 'Удалить у меня');
+      hideButton.type = 'button';
+      hideButton.addEventListener('click', () => deleteChatMessage(message, 'self', chatId));
+      if (message.senderId === currentUser.uid) {
+        const deleteButton = appendTextElement(actions, 'button', 'chat-context-delete', 'Удалить у всех');
+        deleteButton.type = 'button';
+        deleteButton.addEventListener('click', () => deleteChatMessage(message, 'everyone', chatId));
+      }
+    }
+    chatMessages.append(bubble);
   });
   chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function formatAudioTime(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.floor(seconds % 60);
+  return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
+}
+
+function createVoiceMessagePlayer(audioData) {
+  const player = document.createElement('div');
+  player.className = 'voice-player';
+  const audio = document.createElement('audio');
+  audio.preload = 'metadata';
+  audio.src = audioData;
+  audio.setAttribute('aria-label', 'Голосовое сообщение');
+  audio.hidden = true;
+
+  const playButton = appendTextElement(player, 'button', 'voice-player-toggle', '▶');
+  playButton.type = 'button';
+  playButton.setAttribute('aria-label', 'Воспроизвести голосовое сообщение');
+  const controls = document.createElement('div');
+  controls.className = 'voice-player-controls';
+  const progress = document.createElement('input');
+  progress.className = 'voice-player-progress';
+  progress.type = 'range';
+  progress.min = '0';
+  progress.max = '1000';
+  progress.value = '0';
+  progress.setAttribute('aria-label', 'Позиция голосового сообщения');
+  const time = appendTextElement(controls, 'span', 'voice-player-time', '0:00 / 0:00');
+  controls.prepend(progress);
+  player.append(controls, audio);
+
+  const updateProgress = () => {
+    const duration = Number.isFinite(audio.duration) ? audio.duration : 0;
+    const fraction = duration ? audio.currentTime / duration : 0;
+    progress.value = String(Math.round(fraction * 1000));
+    progress.style.setProperty('--voice-progress', `${fraction * 100}%`);
+    time.textContent = `${formatAudioTime(audio.currentTime)} / ${formatAudioTime(duration)}`;
+  };
+  const updatePlayButton = (isPlaying) => {
+    playButton.textContent = isPlaying ? 'Ⅱ' : '▶';
+    playButton.setAttribute('aria-label', isPlaying
+      ? 'Приостановить голосовое сообщение'
+      : 'Воспроизвести голосовое сообщение');
+    player.classList.toggle('is-playing', isPlaying);
+  };
+
+  playButton.addEventListener('click', async () => {
+    if (audio.paused) {
+      document.querySelectorAll('.voice-player audio').forEach((otherAudio) => {
+        if (otherAudio !== audio) otherAudio.pause();
+      });
+      try {
+        await audio.play();
+      } catch (error) {
+        console.error('Не удалось воспроизвести голосовое сообщение:', error);
+        showToast('Не удалось воспроизвести голосовое сообщение.');
+      }
+    } else {
+      audio.pause();
+    }
+  });
+  progress.addEventListener('input', () => {
+    if (!Number.isFinite(audio.duration)) return;
+    audio.currentTime = audio.duration * Number(progress.value) / 1000;
+    updateProgress();
+  });
+  audio.addEventListener('loadedmetadata', updateProgress);
+  audio.addEventListener('timeupdate', updateProgress);
+  audio.addEventListener('play', () => updatePlayButton(true));
+  audio.addEventListener('pause', () => updatePlayButton(false));
+  audio.addEventListener('ended', () => {
+    updatePlayButton(false);
+    updateProgress();
+  });
+  updateProgress();
+  return player;
+}
+
+function setChatComposerEnabled(enabled) {
+  chatMessageInput.disabled = !enabled;
+  chatMessageForm.querySelectorAll('button').forEach((button) => {
+    button.disabled = !enabled;
+  });
+  if (voiceRecorder?.state === 'recording') {
+    voiceStopButton.disabled = false;
+  }
+}
+
+async function deleteChatMessage(message, scope, chatId) {
+  const messageReference = doc(db, 'chats', chatId, 'messages', message.id);
+  try {
+    if (scope === 'self') {
+      const deletedFor = [...new Set([...(message.deletedFor || []), currentUser.uid])];
+      await updateDoc(messageReference, { deletedFor });
+      const chat = socialChats.find((entry) => entry.id === chatId);
+      if (chat?.lastMessageId === message.id) {
+        await saveChatSettings(chat.id, { hiddenLastMessageId: message.id });
+      }
+      showToast('Сообщение удалено из твоего чата.');
+      return;
+    }
+
+    const chat = socialChats.find((entry) => entry.id === chatId);
+    if (!chat || message.senderId !== currentUser.uid) return;
+    await deleteDoc(messageReference);
+    if (chat.lastMessageId === message.id) {
+      try {
+        await updateDoc(doc(db, 'chats', chat.id), { lastMessage: 'Сообщение удалено' });
+      } catch (error) {
+        console.error('Сообщение удалено, но не удалось обновить превью чата:', error);
+      }
+    }
+    if (getCurrentChatSettings(chat.id).hiddenLastMessageId === message.id) {
+      await saveChatSettings(chat.id, { hiddenLastMessageId: '' });
+    }
+    showToast('Сообщение удалено у всех участников.');
+  } catch (error) {
+    console.error(`Не удалось удалить сообщение (${scope}) в чате ${chatId}:`, error?.code, error?.message, error);
+    if (error?.code === 'permission-denied') {
+      showToast(scope === 'everyone'
+        ? 'Firestore запретил удаление документа сообщения. Опубликуй правила, разрешающие автору удалять своё сообщение.'
+        : 'Firestore отклонил удаление сообщения. Проверь опубликованные правила Firestore.');
+      return;
+    }
+    showToast(`Не удалось удалить сообщение (${error?.code || 'ошибка'}). Проверь подключение и попробуй снова.`);
+  }
 }
 
 async function saveChatSettings(chatId, changes) {
@@ -408,6 +585,8 @@ async function openChatWithProfile(profile) {
 function selectChat(chat) {
   const chatChanged = selectedChatId !== chat.id;
   selectedChatId = chat.id;
+  chatEmojiPicker.hidden = true;
+  chatEmojiToggle.setAttribute('aria-expanded', 'false');
   showView('messages');
   conversationPlaceholder.hidden = true;
   conversationContent.hidden = false;
@@ -425,8 +604,7 @@ function selectChat(chat) {
   document.querySelector('#chat-header-name').textContent = name;
   document.querySelector('#chat-header-nickname').textContent = profile ? `@${profile.nickname}` : '';
   const canMessage = areAcceptedFriends(currentUser.uid, otherUserId) && !blockedUserIds.has(otherUserId);
-  chatMessageInput.disabled = !canMessage;
-  chatMessageForm.querySelector('button').disabled = !canMessage;
+  setChatComposerEnabled(canMessage);
   chatMessageInput.placeholder = blockedUserIds.has(otherUserId)
     ? 'Разблокируй пользователя, чтобы отправить сообщение'
     : canMessage ? 'Напиши сообщение…' : 'Добавь пользователя в друзья, чтобы отправить сообщение';
@@ -452,8 +630,13 @@ function selectChat(chat) {
 async function sendChatMessage(event) {
   event.preventDefault();
   const text = chatMessageInput.value.trim();
-  const chat = socialChats.find((entry) => entry.id === selectedChatId);
-  if (!text || !chat || !currentUser) return;
+  if (!text) return;
+  await sendChatPayload(text, '', selectedChatId);
+}
+
+async function sendChatPayload(text, audioData, chatId) {
+  const chat = socialChats.find((entry) => entry.id === chatId);
+  if ((!text && !audioData) || !chat || !currentUser) return;
   const receiverId = chat.members.find((memberId) => memberId !== currentUser.uid);
   if (blockedUserIds.has(receiverId) || !areAcceptedFriends(currentUser.uid, receiverId)) {
     showToast(blockedUserIds.has(receiverId)
@@ -461,19 +644,28 @@ async function sendChatMessage(event) {
       : 'Добавь пользователя в друзья, чтобы отправить сообщение.');
     return;
   }
+  if (audioData.length > 650000) {
+    showToast('Запись слишком большая. Попробуй записать короче.');
+    return;
+  }
 
-  const sendButton = chatMessageForm.querySelector('button');
-  sendButton.disabled = true;
+  setChatComposerEnabled(false);
   try {
     const batch = writeBatch(db);
     const messageReference = doc(collection(db, 'chats', chat.id, 'messages'));
-    batch.set(messageReference, {
+    const message = {
       senderId: currentUser.uid,
       text,
       createdAt: serverTimestamp()
-    });
+    };
+    if (audioData) {
+      message.text = '[Голосовое сообщение]';
+      message.audioData = audioData;
+      message.audioType = audioData.slice(5, audioData.indexOf(';'));
+    }
+    batch.set(messageReference, message);
     batch.update(doc(db, 'chats', chat.id), {
-      lastMessage: text,
+      lastMessage: message.text,
       lastMessageAt: serverTimestamp(),
       lastMessageSender: currentUser.uid,
       lastMessageId: messageReference.id
@@ -481,18 +673,194 @@ async function sendChatMessage(event) {
     batch.set(doc(db, 'chatSettings', currentUser.uid, 'chats', chat.id), {
       ...getCurrentChatSettings(chat.id),
       hidden: false,
+      hiddenLastMessageId: '',
       lastReadAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     }, { merge: true });
     await batch.commit();
-    chatMessageInput.value = '';
+    if (selectedChatId === chat.id && !audioData) chatMessageInput.value = '';
   } catch (error) {
+    console.error('Не удалось отправить сообщение:', error);
     showToast(error?.code === 'permission-denied'
-      ? 'Не удалось отправить сообщение. Проверь правила Firestore и статус дружбы.'
+      ? 'Не удалось отправить сообщение. Проверь опубликованные правила Firestore и статус дружбы.'
       : 'Не удалось отправить сообщение. Проверь подключение и попробуй снова.');
   } finally {
-    sendButton.disabled = false;
-    chatMessageInput.focus();
+    const activeChat = socialChats.find((entry) => entry.id === selectedChatId);
+    const otherUserId = activeChat?.members.find((memberId) => memberId !== currentUser?.uid);
+    setChatComposerEnabled(Boolean(activeChat && currentUser
+      && areAcceptedFriends(currentUser.uid, otherUserId)
+      && !blockedUserIds.has(otherUserId)));
+    if (selectedChatId === chat.id && !audioData) chatMessageInput.focus();
+  }
+}
+
+function readBlobAsDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error('Не удалось прочитать голосовую запись.'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function setVoiceRecordingControls(isRecording) {
+  voiceRecordButton.hidden = isRecording;
+  voiceStopButton.hidden = !isRecording;
+  voiceRecordingStatus.hidden = !isRecording;
+  if (isRecording) {
+    voiceRecordingStatus.textContent = `Запись ${formatVoiceRecordingDuration(0)} / 00:30`;
+    voiceRecordingTimer = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - voiceRecordingStartedAt) / 1000);
+      voiceRecordingStatus.textContent = `Запись ${formatVoiceRecordingDuration(elapsed)} / 00:30`;
+    }, 250);
+  } else {
+    clearInterval(voiceRecordingTimer);
+    voiceRecordingTimer = null;
+  }
+}
+
+function formatVoiceRecordingDuration(totalSeconds) {
+  const seconds = Math.min(totalSeconds, 30);
+  return `00:${String(seconds).padStart(2, '0')}`;
+}
+
+async function startVoiceRecording() {
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    showToast('Запись голосовых сообщений не поддерживается этим браузером.');
+    return;
+  }
+  const chat = socialChats.find((entry) => entry.id === selectedChatId);
+  if (!chat || !currentUser) return;
+  const receiverId = chat.members.find((memberId) => memberId !== currentUser.uid);
+  if (blockedUserIds.has(receiverId) || !areAcceptedFriends(currentUser.uid, receiverId)) {
+    showToast('Отправлять голосовые сообщения можно только друзьям, которым разрешено писать.');
+    return;
+  }
+
+  try {
+    voiceRecorderStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mimeType = typeof MediaRecorder.isTypeSupported === 'function'
+      ? ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4']
+        .find((type) => MediaRecorder.isTypeSupported(type))
+      : '';
+    voiceRecorder = new MediaRecorder(voiceRecorderStream, mimeType ? { mimeType } : undefined);
+    voiceRecordingChunks = [];
+    voiceRecordingCancelled = false;
+    voiceRecordingChatId = chat.id;
+    voiceRecordingStartedAt = Date.now();
+    voiceRecorder.addEventListener('dataavailable', (event) => {
+      if (event.data.size) voiceRecordingChunks.push(event.data);
+    });
+    voiceRecorder.addEventListener('error', (event) => {
+      console.error('Ошибка записи голосового сообщения:', event.error);
+      voiceRecordingCancelled = true;
+      showToast('Не удалось записать голосовое сообщение.');
+      if (voiceRecorder?.state === 'recording') stopVoiceRecording(true);
+    });
+    voiceRecorder.addEventListener('stop', async () => {
+      clearTimeout(voiceRecordingTimeout);
+      clearInterval(voiceRecordingTimer);
+      voiceRecordingTimer = null;
+      voiceRecorderStream?.getTracks().forEach((track) => track.stop());
+      voiceRecorderStream = null;
+      const recording = new Blob(voiceRecordingChunks, { type: voiceRecorder?.mimeType || mimeType || 'audio/webm' });
+      const cancelled = voiceRecordingCancelled;
+      const chatId = voiceRecordingChatId;
+      voiceRecorder = null;
+      voiceRecordingChunks = [];
+      voiceRecordingChatId = '';
+      setVoiceRecordingControls(false);
+      const activeChat = socialChats.find((entry) => entry.id === selectedChatId);
+      const otherUserId = activeChat?.members.find((memberId) => memberId !== currentUser?.uid);
+      setChatComposerEnabled(Boolean(activeChat && currentUser
+        && areAcceptedFriends(currentUser.uid, otherUserId)
+        && !blockedUserIds.has(otherUserId)));
+      if (cancelled) return;
+      if (!recording.size) {
+        showToast('Запись пустая. Попробуй ещё раз.');
+        return;
+      }
+      if (recording.size > 450000) {
+        showToast('Запись слишком большая. Попробуй записать короче.');
+        return;
+      }
+      voiceRecordingStatus.hidden = false;
+      voiceRecordingStatus.textContent = 'Подготовка голосового сообщения…';
+      try {
+        const dataUrl = await readBlobAsDataUrl(recording);
+        const base64 = String(dataUrl).split(',')[1];
+        const audioType = recording.type.split(';')[0];
+        if (!base64 || !['audio/webm', 'audio/ogg', 'audio/mp4'].includes(audioType)) {
+          throw new Error('Формат голосовой записи не поддерживается.');
+        }
+        await sendChatPayload('', `data:${audioType};base64,${base64}`, chatId);
+      } catch (error) {
+        console.error('Не удалось подготовить голосовое сообщение:', error);
+        showToast(error.message || 'Не удалось подготовить голосовое сообщение.');
+      } finally {
+        voiceRecordingStatus.hidden = true;
+      }
+    }, { once: true });
+    voiceRecorder.start(1000);
+    setVoiceRecordingControls(true);
+    setChatComposerEnabled(false);
+    voiceRecordingTimeout = setTimeout(() => stopVoiceRecording(false), 30000);
+  } catch (error) {
+    console.error('Не удалось начать запись голоса:', error);
+    clearTimeout(voiceRecordingTimeout);
+    clearInterval(voiceRecordingTimer);
+    voiceRecordingTimer = null;
+    voiceRecorderStream?.getTracks().forEach((track) => track.stop());
+    voiceRecorderStream = null;
+    voiceRecorder = null;
+    showToast(error.name === 'NotAllowedError'
+      ? 'Разреши доступ к микрофону, чтобы записать сообщение.'
+      : 'Не удалось начать запись голосового сообщения.');
+  }
+}
+
+function stopVoiceRecording(cancelled) {
+  if (voiceRecorder?.state !== 'recording') return;
+  voiceRecordingCancelled = cancelled;
+  clearTimeout(voiceRecordingTimeout);
+  voiceRecorder.stop();
+}
+
+async function toggleEmojiPicker() {
+  if (!chatEmojiPicker.hidden) {
+    chatEmojiPicker.hidden = true;
+    chatEmojiToggle.setAttribute('aria-expanded', 'false');
+    return;
+  }
+  try {
+    if (!customElements.get('emoji-picker')) {
+      emojiPickerLoadPromise ||= import('https://cdn.jsdelivr.net/npm/emoji-picker-element@1.29.1/index.js');
+      await emojiPickerLoadPromise;
+    }
+    if (!chatEmojiPicker.firstChild) {
+      const picker = document.createElement('emoji-picker');
+      picker.setAttribute('locale', 'ru');
+      picker.classList.toggle('dark', document.documentElement.dataset.theme === 'dark');
+      picker.addEventListener('emoji-click', (event) => {
+        const emoji = event.detail?.unicode;
+        if (typeof emoji !== 'string' || !emoji) return;
+        const replacedLength = chatMessageInput.selectionEnd - chatMessageInput.selectionStart;
+        if (chatMessageInput.value.length - replacedLength + emoji.length > chatMessageInput.maxLength) {
+          showToast('Достигнут лимит длины сообщения.');
+          return;
+        }
+        chatMessageInput.setRangeText(emoji, chatMessageInput.selectionStart, chatMessageInput.selectionEnd, 'end');
+        chatMessageInput.dispatchEvent(new Event('input', { bubbles: true }));
+        chatMessageInput.focus();
+      });
+      chatEmojiPicker.append(picker);
+    }
+    chatEmojiPicker.hidden = false;
+    chatEmojiToggle.setAttribute('aria-expanded', 'true');
+  } catch (error) {
+    console.error('Не удалось загрузить панель эмодзи:', error);
+    emojiPickerLoadPromise = null;
+    showToast('Не удалось загрузить эмодзи. Проверь подключение к интернету.');
   }
 }
 
@@ -875,6 +1243,7 @@ function renderProfilePhoto(photoUrl) {
 
 function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
+  chatEmojiPicker.querySelector('emoji-picker')?.classList.toggle('dark', theme === 'dark');
   localStorage.setItem('vkt-theme', theme);
   const nextTheme = theme === 'dark' ? 'light' : 'dark';
   const actionLabel = `Включить ${nextTheme === 'dark' ? 'тёмную' : 'светлую'} тему`;
@@ -1046,12 +1415,23 @@ const toggleChatArchiveView = () => {
 };
 archiveToggle.addEventListener('click', toggleChatArchiveView);
 chatMessageForm.addEventListener('submit', sendChatMessage);
+chatEmojiToggle.addEventListener('click', toggleEmojiPicker);
+voiceRecordButton.addEventListener('click', startVoiceRecording);
+voiceStopButton.addEventListener('click', () => stopVoiceRecording(false));
 
 document.addEventListener('click', (event) => {
   if (!event.target.closest('.chat-row')) closeChatMenus();
+  if (!event.target.closest('#chat-emoji-picker, #chat-emoji-toggle')) {
+    chatEmojiPicker.hidden = true;
+    chatEmojiToggle.setAttribute('aria-expanded', 'false');
+  }
 });
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape') closeChatMenus();
+  if (event.key === 'Escape') {
+    closeChatMenus();
+    chatEmojiPicker.hidden = true;
+    chatEmojiToggle.setAttribute('aria-expanded', 'false');
+  }
 });
 
 document.addEventListener('click', (event) => {
@@ -1124,52 +1504,668 @@ document.querySelectorAll('.join-button').forEach((button) => {
   });
 });
 
-let selectedTrack = '';
-let isPlaying = false;
-const nowPlaying = document.querySelector('#now-playing');
-const playerToggle = document.querySelector('#player-toggle');
+const youtubeApiKeyStorageKey = 'vkt-youtube-api-key';
+const youtubeApiKeyInput = document.querySelector('#youtube-api-key');
+const musicConnectionForm = document.querySelector('#music-connection-form');
+const musicSearchForm = document.querySelector('#music-search-form');
+const musicSearchInput = document.querySelector('#music-search-input');
+const musicTrackList = document.querySelector('#track-list');
+const musicResultsCount = document.querySelector('#music-results-count');
+const userPlaylistsList = document.querySelector('#user-playlists-list');
+const playlistCreateOpenButton = document.querySelector('#playlist-create-open');
+const playlistDialog = document.querySelector('#playlist-dialog');
+const playlistDialogCloseButton = document.querySelector('#playlist-dialog-close');
+const playlistDialogCancelButton = document.querySelector('#playlist-dialog-cancel');
+const playlistForm = document.querySelector('#playlist-form');
+const playlistChoices = document.querySelector('#playlist-choices');
+const playlistChoiceList = document.querySelector('#playlist-choice-list');
+const playlistNameInput = document.querySelector('#playlist-name');
+const playlistFormMessage = document.querySelector('#playlist-form-message');
+const playlistSubmitButton = document.querySelector('#playlist-submit');
+const playlistDialogTitle = document.querySelector('#playlist-dialog-title');
+const youtubePlayer = document.querySelector('#youtube-player');
+const youtubePlayerPlaceholder = document.querySelector('#youtube-player-placeholder');
+const transportTitle = document.querySelector('#transport-title');
+const transportChannel = document.querySelector('#transport-channel');
+const previousTrackButton = document.querySelector('#music-previous');
+const playPauseButton = document.querySelector('#music-play-pause');
+const nextTrackButton = document.querySelector('#music-next');
+const repeatTrackButton = document.querySelector('#music-repeat');
+const musicVolumeInput = document.querySelector('#music-volume');
+let musicSearchAbortController;
+let musicRequestNumber = 0;
+let youtubeNextPageToken = '';
+let youtubeLastSearch = { query: '', order: 'relevance' };
+let musicQueue = [];
+let selectedVideoIndex = -1;
+let youtubePlayerApiPromise;
+let youtubePlayerReadyPromise;
+let youtubePlayerInstance;
+let repeatPlaylist = false;
+let musicPlaylists = [];
+let playlistTargetTrack = null;
 
-function selectTrack(title) {
-  selectedTrack = title;
-  nowPlaying.textContent = title;
-  document.querySelectorAll('.track-row').forEach((row) => {
-    const isSelected = row.dataset.track === title;
-    row.classList.toggle('is-playing', isSelected);
-    row.querySelector('.track-play').textContent = isSelected && isPlaying ? 'Ⅱ' : '▶';
-  });
-  showToast('Демонстрационный плеер: аудиофайл не подключён.');
+function getMusicPlaylistsStorageKey() {
+  return `vkt-music-playlists:${currentUser?.uid || 'local'}`;
 }
 
-document.querySelectorAll('.track-row').forEach((row) => {
-  row.addEventListener('click', () => selectTrack(row.dataset.track));
-});
+function saveMusicPlaylists() {
+  localStorage.setItem(getMusicPlaylistsStorageKey(), JSON.stringify(musicPlaylists));
+}
 
-document.querySelector('[data-play-all]')?.addEventListener('click', () => {
-  if (!selectedTrack) selectTrack('Тёплый свет');
-  isPlaying = true;
-  playerToggle.textContent = 'Ⅱ';
-  playerToggle.setAttribute('aria-label', 'Приостановить');
-});
-
-playerToggle?.addEventListener('click', () => {
-  if (!selectedTrack) {
-    showToast('Сначала выбери трек. Аудиофайлы пока не подключены.');
+function loadMusicPlaylists() {
+  const savedPlaylists = localStorage.getItem(getMusicPlaylistsStorageKey());
+  if (!savedPlaylists) {
+    musicPlaylists = [];
+    renderMusicPlaylists();
     return;
   }
-  isPlaying = !isPlaying;
-  playerToggle.textContent = isPlaying ? 'Ⅱ' : '▶';
-  playerToggle.setAttribute('aria-label', isPlaying ? 'Приостановить' : 'Воспроизвести');
-  document.querySelectorAll('.track-row').forEach((row) => {
-    if (row.dataset.track === selectedTrack) row.querySelector('.track-play').textContent = isPlaying ? 'Ⅱ' : '▶';
+
+  try {
+    const parsedPlaylists = JSON.parse(savedPlaylists);
+    musicPlaylists = Array.isArray(parsedPlaylists)
+      ? parsedPlaylists.filter((playlist) => typeof playlist.id === 'string'
+        && typeof playlist.name === 'string'
+        && Array.isArray(playlist.tracks))
+        .map((playlist) => ({
+          id: playlist.id,
+          name: playlist.name,
+          tracks: playlist.tracks.filter((track) => typeof track.id === 'string'
+            && typeof track.title === 'string'
+            && typeof track.channelTitle === 'string')
+            .map((track) => ({
+              id: track.id,
+              snippet: {
+                title: track.title,
+                channelTitle: track.channelTitle,
+                thumbnails: track.thumbnails || {}
+              }
+            }))
+        }))
+      : [];
+  } catch (error) {
+    console.error('Не удалось прочитать сохранённые плейлисты:', error);
+    musicPlaylists = [];
+  }
+  renderMusicPlaylists();
+}
+
+function renderMusicPlaylists() {
+  userPlaylistsList.replaceChildren();
+  if (!musicPlaylists.length) {
+    appendTextElement(userPlaylistsList, 'div', 'empty-state', 'Пока нет плейлистов. Добавляй видео из результатов поиска.');
+    return;
+  }
+
+  musicPlaylists.forEach((playlist) => {
+    const row = document.createElement('article');
+    row.className = 'user-playlist-row';
+    const header = document.createElement('div');
+    header.className = 'user-playlist-header';
+    const toggleButton = document.createElement('button');
+    toggleButton.className = 'user-playlist-toggle';
+    toggleButton.type = 'button';
+    toggleButton.setAttribute('aria-expanded', 'false');
+    const details = document.createElement('span');
+    details.className = 'user-playlist-info';
+    appendTextElement(details, 'strong', '', playlist.name);
+    appendTextElement(details, 'small', '', `${playlist.tracks.length} ${playlist.tracks.length === 1 ? 'трек' : 'треков'}`);
+    const expandIcon = appendTextElement(toggleButton, 'span', 'user-playlist-expand-icon', '⌄');
+    expandIcon.setAttribute('aria-hidden', 'true');
+    toggleButton.prepend(details);
+    const trackList = document.createElement('ul');
+    trackList.className = 'playlist-track-list';
+    trackList.id = `music-playlist-tracks-${playlist.id}`;
+    trackList.hidden = true;
+    toggleButton.setAttribute('aria-controls', trackList.id);
+    if (!playlist.tracks.length) {
+      appendTextElement(trackList, 'li', 'playlist-track-empty', 'В плейлисте пока нет треков.');
+    }
+    toggleButton.addEventListener('click', () => {
+      const isExpanded = toggleButton.getAttribute('aria-expanded') !== 'true';
+      toggleButton.setAttribute('aria-expanded', String(isExpanded));
+      trackList.hidden = !isExpanded;
+    });
+    playlist.tracks.forEach((track, index) => {
+      const trackRow = document.createElement('li');
+      trackRow.className = 'playlist-track-row';
+      const trackButton = appendTextElement(trackRow, 'button', 'playlist-track-play', '');
+      trackButton.type = 'button';
+      trackButton.setAttribute('aria-label', `Воспроизвести ${track.snippet.title}`);
+      appendTextElement(trackButton, 'strong', '', track.snippet.title);
+      appendTextElement(trackButton, 'small', '', track.snippet.channelTitle);
+      trackButton.addEventListener('click', () => {
+        musicQueue = playlist.tracks;
+        repeatPlaylist = false;
+        updateSelectedVideo(index);
+        updateTransportControls(false);
+        playQueueItem(index);
+      });
+      const removeTrackButton = appendTextElement(trackRow, 'button', 'playlist-delete-button', 'Удалить');
+      removeTrackButton.type = 'button';
+      removeTrackButton.setAttribute('aria-label', `Удалить «${track.snippet.title}» из плейлиста «${playlist.name}»`);
+      removeTrackButton.addEventListener('click', () => removeTrackFromPlaylist(playlist, index));
+      trackList.append(trackRow);
+    });
+    const actions = document.createElement('div');
+    actions.className = 'user-playlist-actions';
+    const playButton = appendTextElement(actions, 'button', 'outline-button', '▶ Слушать');
+    playButton.type = 'button';
+    playButton.disabled = !playlist.tracks.length;
+    playButton.addEventListener('click', () => {
+      musicQueue = playlist.tracks;
+      repeatPlaylist = false;
+      updateSelectedVideo(0);
+      updateTransportControls(false);
+      playQueueItem(0);
+    });
+    const deleteButton = appendTextElement(actions, 'button', 'playlist-delete-button', 'Удалить');
+    deleteButton.type = 'button';
+    deleteButton.setAttribute('aria-label', `Удалить плейлист «${playlist.name}»`);
+    deleteButton.addEventListener('click', () => {
+      musicPlaylists = musicPlaylists.filter((item) => item.id !== playlist.id);
+      saveMusicPlaylists();
+      renderMusicPlaylists();
+    });
+    header.append(toggleButton, actions);
+    row.append(header, trackList);
+    userPlaylistsList.append(row);
   });
-  showToast('Демонстрационный плеер: аудиофайл не подключён.');
+}
+
+function removeTrackFromPlaylist(playlist, trackIndex) {
+  const wasPlayingPlaylist = musicQueue === playlist.tracks;
+  playlist.tracks.splice(trackIndex, 1);
+  saveMusicPlaylists();
+  renderMusicPlaylists();
+
+  if (!wasPlayingPlaylist) {
+    showToast('Трек удалён из плейлиста.');
+    return;
+  }
+  if (!playlist.tracks.length) {
+    youtubePlayerInstance?.stopVideo();
+    selectedVideoIndex = -1;
+    transportTitle.textContent = 'Выбери видео из списка';
+    transportChannel.textContent = 'YouTube Music';
+    updateTransportControls(false);
+    showToast('Трек удалён. Плейлист пуст.');
+    return;
+  }
+
+  const nextIndex = trackIndex < selectedVideoIndex
+    ? selectedVideoIndex - 1
+    : Math.min(selectedVideoIndex, playlist.tracks.length - 1);
+  playQueueItem(nextIndex, false);
+  showToast('Трек удалён из плейлиста.');
+}
+
+function renderPlaylistChoices() {
+  playlistChoiceList.replaceChildren();
+  playlistChoices.hidden = !playlistTargetTrack || musicPlaylists.length === 0;
+  playlistSubmitButton.textContent = playlistTargetTrack ? 'Добавить трек' : 'Создать плейлист';
+  if (!playlistTargetTrack || !musicPlaylists.length) return;
+
+  musicPlaylists.forEach((playlist) => {
+    const label = document.createElement('label');
+    label.className = 'playlist-choice';
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = 'playlistId';
+    input.value = playlist.id;
+    const text = document.createElement('span');
+    text.textContent = `${playlist.name} (${playlist.tracks.length})`;
+    label.append(input, text);
+    playlistChoiceList.append(label);
+  });
+}
+
+function openPlaylistDialog(track = null) {
+  playlistTargetTrack = track;
+  playlistForm.reset();
+  playlistFormMessage.hidden = true;
+  playlistFormMessage.textContent = '';
+  playlistDialogTitle.textContent = track ? 'Добавить трек в плейлист' : 'Создать плейлист';
+  renderPlaylistChoices();
+  playlistDialog.showModal();
+  playlistNameInput.focus();
+}
+
+function makePlaylistTrack(video) {
+  return {
+    id: video.id,
+    title: video.snippet.title,
+    channelTitle: video.snippet.channelTitle,
+    thumbnails: video.snippet.thumbnails || {}
+  };
+}
+
+function addTrackToPlaylist(playlist, track) {
+  if (playlist.tracks.some((item) => item.id === track.id)) return false;
+  playlist.tracks.push({
+    id: track.id,
+    snippet: {
+      title: track.title,
+      channelTitle: track.channelTitle,
+      thumbnails: track.thumbnails || {}
+    }
+  });
+  return true;
+}
+
+function updateTransportControls(isPlaying = false) {
+  const hasSelection = selectedVideoIndex >= 0 && selectedVideoIndex < musicQueue.length;
+  const canGoPrevious = hasSelection && (selectedVideoIndex > 0 || repeatPlaylist);
+  const canGoNext = hasSelection && (selectedVideoIndex < musicQueue.length - 1 || repeatPlaylist);
+  previousTrackButton.disabled = !canGoPrevious;
+  nextTrackButton.disabled = !canGoNext;
+  playPauseButton.disabled = !hasSelection;
+  repeatTrackButton.disabled = !hasSelection || musicQueue.length < 2;
+  playPauseButton.textContent = isPlaying ? 'Ⅱ' : '▶';
+  playPauseButton.setAttribute('aria-label', isPlaying ? 'Пауза' : 'Воспроизвести');
+  playPauseButton.title = isPlaying ? 'Пауза' : 'Воспроизвести';
+  repeatTrackButton.setAttribute('aria-pressed', String(repeatPlaylist));
+  repeatTrackButton.setAttribute('aria-label', repeatPlaylist ? 'Повтор списка включён' : 'Повтор списка выключен');
+  repeatTrackButton.title = repeatPlaylist ? 'Повтор списка включён' : 'Повтор списка выключен';
+}
+
+function updateSelectedVideo(index) {
+  if (index < 0 || index >= musicQueue.length) return;
+  selectedVideoIndex = index;
+  const { id, snippet } = musicQueue[index];
+  transportTitle.textContent = snippet.title;
+  transportChannel.textContent = snippet.channelTitle;
+  musicTrackList.querySelectorAll('.track-row').forEach((row) => {
+    const isSelected = row.dataset.videoId === id;
+    row.classList.toggle('is-playing', isSelected);
+    row.setAttribute('aria-current', isSelected ? 'true' : 'false');
+  });
+  updateTransportControls(youtubePlayerInstance?.getPlayerState() === window.YT?.PlayerState.PLAYING);
+}
+
+function loadYouTubePlayerApi() {
+  if (window.YT?.Player) return Promise.resolve();
+  if (youtubePlayerApiPromise) return youtubePlayerApiPromise;
+
+  youtubePlayerApiPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://www.youtube.com/iframe_api';
+    script.async = true;
+    window.onYouTubeIframeAPIReady = resolve;
+    script.onerror = () => {
+      youtubePlayerApiPromise = null;
+      reject(new Error('Не удалось загрузить YouTube-плеер.'));
+    };
+    document.head.append(script);
+  });
+  return youtubePlayerApiPromise;
+}
+
+async function ensureYouTubePlayer() {
+  await loadYouTubePlayerApi();
+  if (youtubePlayerReadyPromise) return youtubePlayerReadyPromise;
+
+  youtubePlayer.hidden = false;
+  youtubePlayerPlaceholder.hidden = true;
+  youtubePlayerReadyPromise = new Promise((resolve, reject) => {
+    try {
+      youtubePlayerInstance = new window.YT.Player('youtube-player', {
+        width: '480',
+        height: '270',
+        playerVars: {
+          playsinline: 1,
+          rel: 0,
+          origin: window.location.origin
+        },
+        events: {
+          onReady: (event) => {
+            event.target.setVolume(Number(musicVolumeInput.value));
+            updateTransportControls(false);
+            resolve(event.target);
+          },
+          onStateChange: (event) => {
+            const { PlayerState } = window.YT;
+            if (event.data === PlayerState.PLAYING) {
+              const playlistIndex = event.target.getPlaylistIndex();
+              if (playlistIndex >= 0 && playlistIndex < musicQueue.length) {
+                updateSelectedVideo(playlistIndex);
+              }
+              updateTransportControls(true);
+            } else if (event.data === PlayerState.ENDED) {
+              const nextIndex = selectedVideoIndex + 1;
+              if (nextIndex < musicQueue.length) {
+                playQueueItem(nextIndex, false);
+              } else if (repeatPlaylist && musicQueue.length > 1) {
+                playQueueItem(0, false);
+              } else {
+                updateTransportControls(false);
+              }
+            } else if (event.data === PlayerState.PAUSED) {
+              updateTransportControls(false);
+            }
+          },
+          onError: (event) => {
+            console.error('Ошибка YouTube-плеера:', event.data);
+            showToast('Это видео нельзя воспроизвести во встроенном плеере.');
+            updateTransportControls(false);
+          }
+        }
+      });
+    } catch (error) {
+      youtubePlayerInstance = null;
+      youtubePlayerReadyPromise = null;
+      reject(error);
+    }
+  });
+  return youtubePlayerReadyPromise;
+}
+
+async function playQueueItem(index, scrollToPlayer = true) {
+  if (index < 0 || index >= musicQueue.length) return;
+  updateSelectedVideo(index);
+  youtubePlayer.hidden = false;
+  youtubePlayerPlaceholder.hidden = true;
+  if (scrollToPlayer) {
+    document.querySelector('.youtube-player-card').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  try {
+    const player = await ensureYouTubePlayer();
+    const playlist = musicQueue.map((video) => video.id);
+    player.loadPlaylist(playlist, index, 0);
+    player.setLoop(repeatPlaylist);
+    player.setVolume(Number(musicVolumeInput.value));
+  } catch (error) {
+    console.error('Не удалось запустить YouTube-плеер:', error);
+    showToast(error.message || 'Не удалось запустить YouTube-плеер.');
+  }
+}
+
+function moveInQueue(direction) {
+  if (selectedVideoIndex < 0 || !musicQueue.length) return;
+  let nextIndex = selectedVideoIndex + direction;
+  if (nextIndex < 0 || nextIndex >= musicQueue.length) {
+    if (!repeatPlaylist) return;
+    nextIndex = (nextIndex + musicQueue.length) % musicQueue.length;
+  }
+  if (nextIndex !== selectedVideoIndex) playQueueItem(nextIndex, false);
+}
+
+function setMusicStatus(message) {
+  youtubePlayerInstance?.stopVideo();
+  musicTrackList.replaceChildren();
+  musicQueue = [];
+  selectedVideoIndex = -1;
+  transportTitle.textContent = 'Выбери видео из списка';
+  transportChannel.textContent = 'YouTube Music';
+  appendTextElement(musicTrackList, 'li', 'empty-state', message);
+  musicResultsCount.textContent = '';
+  youtubeNextPageToken = '';
+  updateTransportControls(false);
+  updateYouTubeMoreButton();
+}
+
+function updateYouTubeMoreButton() {
+  let button = document.querySelector('#youtube-load-more');
+  if (!button) {
+    button = document.createElement('button');
+    button.id = 'youtube-load-more';
+    button.className = 'outline-button youtube-load-more';
+    button.type = 'button';
+    button.textContent = 'Загрузить ещё';
+    button.addEventListener('click', () => {
+      searchYouTubeVideos(youtubeLastSearch.query, youtubeLastSearch.order, youtubeNextPageToken, true);
+    });
+    musicTrackList.after(button);
+  }
+  button.hidden = !youtubeNextPageToken;
+}
+
+function renderYouTubeVideos(videos, append = false) {
+  if (!append) {
+    musicTrackList.replaceChildren();
+    musicQueue = [];
+    selectedVideoIndex = -1;
+    transportTitle.textContent = 'Выбери видео из списка';
+    transportChannel.textContent = 'YouTube Music';
+  }
+  const validVideos = videos.filter(({ id, snippet }) => /^[\w-]{11}$/.test(id?.videoId || '') && snippet);
+  const knownVideoIds = new Set(musicQueue.map((video) => video.id));
+  validVideos.forEach(({ id, snippet }) => {
+    if (knownVideoIds.has(id.videoId)) return;
+    knownVideoIds.add(id.videoId);
+    musicQueue.push({ id: id.videoId, snippet });
+  });
+  if (!validVideos.length && !append) {
+    setMusicStatus('По этому запросу ничего не найдено.');
+    return;
+  }
+
+  validVideos.forEach(({ id, snippet }) => {
+    const videoId = id.videoId;
+    if (musicTrackList.querySelector(`[data-video-id="${videoId}"]`)) return;
+    const item = document.createElement('li');
+    item.className = 'track-result';
+    const button = document.createElement('button');
+    button.className = 'track-row';
+    button.type = 'button';
+    button.dataset.videoId = videoId;
+    button.setAttribute('aria-label', `Воспроизвести ${snippet.title} — ${snippet.channelTitle}`);
+    const cover = document.createElement('img');
+    cover.className = 'track-cover';
+    cover.src = snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url || '';
+    cover.alt = `Обложка видео: ${snippet.title}`;
+    cover.loading = 'lazy';
+    cover.onerror = () => {
+      cover.hidden = true;
+      const fallback = document.createElement('span');
+      fallback.className = 'track-cover track-cover-fallback';
+      fallback.textContent = '▶';
+      cover.replaceWith(fallback);
+    };
+    const info = document.createElement('span');
+    info.className = 'track-info';
+    appendTextElement(info, 'strong', '', snippet.title);
+    appendTextElement(info, 'small', '', snippet.channelTitle);
+    const attribution = document.createElement('a');
+    attribution.className = 'track-attribution';
+    attribution.href = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
+    attribution.target = '_blank';
+    attribution.rel = 'noopener noreferrer';
+    attribution.textContent = 'Открыть на YouTube';
+    attribution.addEventListener('click', (event) => event.stopPropagation());
+    info.append(attribution);
+    button.prepend(cover, info);
+    button.addEventListener('click', () => playQueueItem(musicQueue.findIndex((video) => video.id === videoId)));
+    item.append(button);
+    const addButton = appendTextElement(item, 'button', 'track-add-button', '＋');
+    addButton.type = 'button';
+    addButton.setAttribute('aria-label', `Добавить «${snippet.title}» в плейлист`);
+    addButton.title = 'Добавить в плейлист';
+    addButton.addEventListener('click', () => openPlaylistDialog({
+      id: videoId,
+      snippet: {
+        title: snippet.title,
+        channelTitle: snippet.channelTitle,
+        thumbnails: snippet.thumbnails || {}
+      }
+    }));
+    musicTrackList.append(item);
+  });
+  musicResultsCount.textContent = `${musicTrackList.querySelectorAll('.track-row').length} видео`;
+  updateTransportControls(false);
+  updateYouTubeMoreButton();
+}
+
+async function searchYouTubeVideos(searchTerm = '', order = 'relevance', pageToken = '', append = false) {
+  const apiKey = localStorage.getItem(youtubeApiKeyStorageKey)?.trim();
+  if (!apiKey) {
+    setMusicStatus('Подключи YouTube Data API, чтобы искать видео.');
+    document.querySelector('.music-connection').open = true;
+    youtubeApiKeyInput.focus();
+    return;
+  }
+  musicCatalogLoaded = true;
+
+  musicSearchAbortController?.abort();
+  musicSearchAbortController = new AbortController();
+  const requestNumber = ++musicRequestNumber;
+  const params = new URLSearchParams({
+    key: apiKey,
+    part: 'snippet',
+    type: 'video',
+    maxResults: '25',
+    order,
+    safeSearch: 'moderate',
+    regionCode: 'RU',
+    relevanceLanguage: 'ru',
+    videoCategoryId: '10',
+    videoEmbeddable: 'true',
+    videoSyndicated: 'true',
+    q: searchTerm || 'music'
+  });
+  if (pageToken) params.set('pageToken', pageToken);
+  if (!append) {
+    youtubeLastSearch = { query: searchTerm, order };
+    youtubeNextPageToken = '';
+    setMusicStatus('Ищу видео на YouTube…');
+  }
+
+  try {
+    const response = await fetch(`https://www.googleapis.com/youtube/v3/search?${params}`, {
+      signal: musicSearchAbortController.signal
+    });
+    const result = await response.json();
+    if (requestNumber !== musicRequestNumber) return;
+    if (!response.ok) {
+      const reason = result.error?.errors?.[0]?.reason;
+      const message = reason === 'quotaExceeded'
+        ? 'Исчерпан дневной лимит YouTube API.'
+        : result.error?.message || `YouTube API вернул HTTP ${response.status}.`;
+      throw new Error(message);
+    }
+    youtubeNextPageToken = result.nextPageToken || '';
+    renderYouTubeVideos(Array.isArray(result.items) ? result.items : [], append);
+  } catch (error) {
+    if (error.name === 'AbortError') return;
+    console.error('Не удалось выполнить поиск на YouTube:', error);
+    if (requestNumber === musicRequestNumber) {
+      musicCatalogLoaded = false;
+      setMusicStatus(`Не удалось выполнить поиск: ${error.message}`);
+    }
+  }
+}
+
+musicConnectionForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const apiKey = youtubeApiKeyInput.value.trim();
+  if (!apiKey) {
+    showToast('Введи ключ YouTube Data API.');
+    return;
+  }
+  localStorage.setItem(youtubeApiKeyStorageKey, apiKey);
+  document.querySelector('.music-connection').open = false;
+  searchYouTubeVideos(musicSearchInput.value.trim() || 'music');
 });
+
+musicSearchForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const query = musicSearchInput.value.trim();
+  if (!query) {
+    showToast('Введи название трека или исполнителя.');
+    musicSearchInput.focus();
+    return;
+  }
+  searchYouTubeVideos(query);
+});
+
+const savedYouTubeApiKey = localStorage.getItem(youtubeApiKeyStorageKey);
+if (savedYouTubeApiKey) youtubeApiKeyInput.value = savedYouTubeApiKey;
+
+playlistCreateOpenButton.addEventListener('click', () => openPlaylistDialog());
+playlistDialogCloseButton.addEventListener('click', () => playlistDialog.close());
+playlistDialogCancelButton.addEventListener('click', () => playlistDialog.close());
+playlistNameInput.addEventListener('input', () => {
+  playlistSubmitButton.textContent = playlistNameInput.value.trim()
+    ? 'Создать плейлист'
+    : playlistTargetTrack ? 'Добавить трек' : 'Создать плейлист';
+});
+playlistForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const playlistName = playlistNameInput.value.trim();
+  playlistFormMessage.hidden = true;
+
+  if (playlistName) {
+    const duplicateName = musicPlaylists.some((playlist) => playlist.name.toLocaleLowerCase('ru') === playlistName.toLocaleLowerCase('ru'));
+    if (duplicateName) {
+      playlistFormMessage.textContent = 'Плейлист с таким названием уже существует.';
+      playlistFormMessage.hidden = false;
+      playlistNameInput.focus();
+      return;
+    }
+    const playlist = {
+      id: crypto.randomUUID(),
+      name: playlistName,
+      tracks: []
+    };
+    if (playlistTargetTrack) addTrackToPlaylist(playlist, makePlaylistTrack(playlistTargetTrack));
+    musicPlaylists.push(playlist);
+    saveMusicPlaylists();
+    renderMusicPlaylists();
+    playlistDialog.close();
+    showToast(playlistTargetTrack ? 'Плейлист создан, трек добавлен.' : 'Плейлист создан.');
+    return;
+  }
+
+  const selectedPlaylistId = playlistForm.querySelector('input[name="playlistId"]:checked')?.value;
+  const selectedPlaylist = musicPlaylists.find((playlist) => playlist.id === selectedPlaylistId);
+  if (!selectedPlaylist || !playlistTargetTrack) {
+    playlistFormMessage.textContent = 'Выбери плейлист или введи название нового.';
+    playlistFormMessage.hidden = false;
+    return;
+  }
+  if (!addTrackToPlaylist(selectedPlaylist, makePlaylistTrack(playlistTargetTrack))) {
+    playlistFormMessage.textContent = 'Этот трек уже есть в плейлисте.';
+    playlistFormMessage.hidden = false;
+    return;
+  }
+  saveMusicPlaylists();
+  renderMusicPlaylists();
+  playlistDialog.close();
+  showToast('Трек добавлен в плейлист.');
+});
+
+previousTrackButton.addEventListener('click', () => moveInQueue(-1));
+nextTrackButton.addEventListener('click', () => moveInQueue(1));
+playPauseButton.addEventListener('click', async () => {
+  if (selectedVideoIndex < 0) return;
+  try {
+    const player = await ensureYouTubePlayer();
+    if (player.getPlayerState() === window.YT.PlayerState.PLAYING) {
+      player.pauseVideo();
+    } else {
+      player.playVideo();
+    }
+  } catch (error) {
+    console.error('Не удалось управлять воспроизведением YouTube:', error);
+    showToast(error.message || 'Не удалось управлять воспроизведением.');
+  }
+});
+repeatTrackButton.addEventListener('click', () => {
+  repeatPlaylist = !repeatPlaylist;
+  youtubePlayerInstance?.setLoop(repeatPlaylist);
+  updateTransportControls(youtubePlayerInstance?.getPlayerState() === window.YT?.PlayerState.PLAYING);
+});
+musicVolumeInput.addEventListener('input', () => {
+  youtubePlayerInstance?.setVolume(Number(musicVolumeInput.value));
+});
+updateTransportControls(false);
 
 document.querySelector('#global-search')?.addEventListener('keydown', (event) => {
   if (event.key !== 'Enter') return;
   const query = event.currentTarget.value.trim().toLocaleLowerCase('ru');
   if (!query) return;
-  const searchableViews = ['feed', 'friends', 'communities', 'messages'];
+  const searchableViews = ['feed', 'friends', 'communities', 'messages', 'music'];
   const match = searchableViews.find((viewName) => {
     const panel = document.querySelector(`[data-panel="${viewName}"]`);
     return panel.textContent.toLocaleLowerCase('ru').includes(query);
@@ -1208,6 +2204,7 @@ function populateUserProfile(user, profile, photoUrl) {
   currentProfileLastName = lastName;
   currentProfileNickname = typeof profile.nickname === 'string' ? profile.nickname.trim() : '';
   currentUser = user;
+  loadMusicPlaylists();
 
   document.querySelectorAll('[data-user-name]').forEach((element) => {
     element.textContent = fullName;

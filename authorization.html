@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Вход в аккаунт Крутое название." />
+    <title>Войти — Крутое название</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/index.css" />
+    <link rel="stylesheet" href="css/authorization.css" />
+  </head>
+  <body>
+    <div class="authorization-page">
+      <div class="authorization-toast" role="alert" aria-live="assertive" hidden>
+        <span class="authorization-toast-message"></span>
+        <button class="authorization-toast-close" type="button" aria-label="Закрыть уведомление">×</button>
+      </div>
+
+      <header class="authorization-header">
+        <a class="authorization-brand" href="index.html" aria-label="Крутое название — главная">Крутое название</a>
+        <button
+          class="theme-toggle"
+          type="button"
+          aria-label="Включить тёмную тему"
+          title="Включить тёмную тему"
+        >
+          <span class="theme-icon" aria-hidden="true">☾</span>
+        </button>
+      </header>
+
+      <main class="authorization-main">
+        <section class="authorization-card" aria-labelledby="authorization-title">
+          <span class="authorization-eyebrow">С возвращением</span>
+          <h1 id="authorization-title">Войти в Крутое название</h1>
+          <p class="authorization-intro">Введите данные своего аккаунта.</p>
+
+          <form class="authorization-form">
+            <label class="authorization-field">
+              <span>Электронная почта</span>
+              <input
+                name="email"
+                type="email"
+                autocomplete="email"
+                required
+                placeholder="name@example.com"
+              />
+            </label>
+
+            <label class="authorization-field">
+              <span>Пароль</span>
+              <input
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                required
+                placeholder="Введите пароль"
+              />
+            </label>
+
+            <button class="primary-btn authorization-submit" type="submit">Войти</button>
+          </form>
+
+          <button class="recovery-button" type="button">Забыли пароль?</button>
+          <p class="authorization-signup">
+            Нет аккаунта?
+            <a class="primary-btn authorization-register-link" href="registration.html">Регистрация</a>
+          </p>
+          <a class="authorization-home-link" href="index.html">Вернуться на главную</a>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="js/authorization.js"></script>
+  </body>
+</html>

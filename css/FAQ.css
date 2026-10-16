@@ -1,0 +1,21 @@
+.coming-soon {
+  min-height: calc(100vh - 160px);
+  display: grid;
+  place-items: center;
+  padding: 32px 20px;
+  text-align: center;
+}
+
+.coming-soon h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: clamp(1.5rem, 4vw, 2.8rem);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+@media (max-width: 720px) {
+  .coming-soon {
+    min-height: calc(100vh - 200px);
+  }
+}

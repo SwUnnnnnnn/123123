@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Крутое название — профиль, лента, сообщения, друзья и сообщества." />
+    <title>Крутое название</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="css/site.css" />
+  </head>
+  <body class="auth-pending">
+    <header class="topbar">
+      <a class="brand" href="site.html" aria-label="Крутое название — главная">Крутое название</a>
+      <label class="search-box">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m16 16 4 4"></path></svg>
+        <input id="global-search" type="search" placeholder="Поиск" aria-label="Поиск" />
+      </label>
+      <div class="notification-menu">
+        <button class="notification-toggle" id="notifications-toggle" type="button" aria-label="Уведомления" aria-expanded="false" aria-controls="notifications-panel">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"></path></svg>
+          <span class="notification-count" id="notification-count" hidden>0</span>
+        </button>
+        <section class="notification-panel" id="notifications-panel" aria-label="Уведомления" hidden>
+          <div class="notification-heading"><h2>Уведомления</h2><button class="notification-close" id="notifications-close" type="button" aria-label="Закрыть уведомления">×</button></div>
+          <div class="notification-list" id="notification-list"><div class="empty-state">Пока нет уведомлений.</div></div>
+        </section>
+      </div>
+      <div class="account-menu">
+        <button
+          class="top-avatar"
+          id="account-menu-toggle"
+          type="button"
+          aria-label="Открыть меню аккаунта"
+          aria-expanded="false"
+          aria-controls="account-menu-panel"
+          data-user-avatar
+        >А</button>
+        <section class="account-menu-panel" id="account-menu-panel" aria-label="Меню аккаунта" hidden>
+          <div class="account-menu-user">
+            <span class="account-menu-identity"><strong data-user-name>Профиль</strong><small data-user-nickname></small></span>
+          </div>
+          <button class="account-menu-profile" id="account-profile-button" type="button" data-view-link="profile">Перейти в профиль</button>
+          <div class="account-menu-theme">
+            <div class="theme-setting-row">
+              <span class="account-menu-label">Тема оформления</span>
+              <button class="theme-toggle-button" id="theme-toggle" type="button" aria-label="Включить тёмную тему" title="Включить тёмную тему">
+                <span class="theme-toggle-icon" aria-hidden="true">☾</span>
+              </button>
+            </div>
+            <div class="color-setting-row">
+              <label class="account-menu-label" for="accent-color">Цвет сайта</label>
+              <label class="color-picker-control" aria-label="Выбрать цвет сайта">
+                <input id="accent-color" type="color" value="#7658e8" aria-label="Выбрать цвет сайта" />
+                <span>Выбрать</span>
+              </label>
+            </div>
+          </div>
+          <button class="account-logout" id="logout-button" type="button">Выйти из аккаунта</button>
+        </section>
+      </div>
+    </header>
+
+    <div class="app-layout">
+      <aside class="sidebar" aria-label="Разделы">
+        <nav class="side-nav">
+          <button class="nav-item" type="button" data-view="feed">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="3"></rect><path d="M4 9h16"></path></svg><span>Лента</span>
+          </button>
+          <button class="nav-item" type="button" data-view="messages">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.8 7.5 8 8 0 0 1-3.4-.8L4 20l1.3-4A7.2 7.2 0 0 1 4 11.5 7.5 7.5 0 0 1 12 4a7.5 7.5 0 0 1 8 7.5Z"></path></svg><span>Сообщения</span>
+          </button>
+          <button class="nav-item" type="button" data-view="friends">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"></circle><path d="M3.5 19c.4-3 2.2-4.5 5.5-4.5s5.1 1.5 5.5 4.5M16 5.5a3 3 0 0 1 0 5.8M17 14.5c2.2.4 3.4 1.9 3.6 4.5"></path></svg><span>Друзья</span>
+          </button>
+          <button class="nav-item" type="button" data-view="communities">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="2.5"></circle><circle cx="16.5" cy="9" r="2"></circle><path d="M3.5 18c.4-2.7 2.2-4.1 5.5-4.1s5.2 1.4 5.5 4.1M15 14c2.8-.1 4.5 1.2 5 3.8"></path><path d="M4 5.5 6 4l2 1.5"></path></svg><span>Сообщества</span>
+          </button>
+          <button class="nav-item" type="button" data-view="music">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3.5" width="16" height="17" rx="3"></rect><path d="M8 16v-4m4 4V8m4 8v-6"></path></svg><span>Музыка</span>
+          </button>
+        </nav>
+      </aside>
+
+      <main class="main-content">
+        <div class="mobile-section-select">
+          <label for="mobile-view">Раздел</label>
+          <select id="mobile-view">
+            <option value="feed">Лента</option><option value="messages">Сообщения</option><option value="friends">Друзья</option><option value="communities">Сообщества</option><option value="music">Музыка</option>
+          </select>
+        </div>
+
+        <section class="view-panel is-visible" data-panel="profile">
+          <div class="page-heading"><div><span class="eyebrow">ЛИЧНАЯ СТРАНИЦА</span><h1>Профиль</h1></div><button class="outline-button" id="profile-edit-open" type="button">Редактировать профиль</button></div>
+          <article class="card profile-card">
+            <div class="cover"><span class="cover-orb cover-orb--one"></span><span class="cover-orb cover-orb--two"></span><span class="cover-label">ТВОЁ ПРОСТРАНСТВО</span></div>
+            <div class="profile-info">
+              <span class="avatar avatar--large profile-avatar" data-profile-avatar aria-label="Фото профиля">V</span>
+              <div class="profile-name"><h2 data-profile-name>Профиль</h2><p data-profile-nickname></p></div>
+            </div>
+          </article>
+          <div class="two-columns profile-sections">
+            <article class="card section-card"><div class="card-heading"><h2>Друзья <span class="subtle-count" id="profile-friend-count">0</span></h2></div><button class="text-button" type="button" data-view-link="friends">Открыть список пользователей</button></article>
+          </div>
+        </section>
+
+        <section class="view-panel" data-panel="feed">
+          <div class="page-heading"><div><span class="eyebrow">ЧТО НОВОГО</span><h1>Лента</h1></div><button class="outline-button" type="button" data-notice="Фильтры ленты скоро появятся.">Моя лента⌄</button></div>
+          <form class="card post-composer" id="post-form"><input name="post" required maxlength="240" placeholder="Что у тебя нового?" aria-label="Текст записи" /><button class="primary-button" type="submit">Опубликовать</button></form>
+          <div class="feed-list" id="feed-list"><div class="card empty-state">Лента пока пуста. Поделись первой записью!</div></div>
+        </section>
+
+        <section class="view-panel" data-panel="messages">
+          <div class="page-heading"><div><span class="eyebrow">ОСТАВАЙСЯ НА СВЯЗИ</span><h1>Сообщения</h1></div><button class="outline-button" id="archive-toggle" type="button" aria-pressed="false">Архив</button></div>
+          <div class="card messenger">
+            <aside class="chat-list">
+              <div class="chat-sidebar-heading"><h2 id="chat-list-title">Чаты</h2></div>
+              <label class="chat-search"><input id="chat-search" type="search" placeholder="Поиск чатов" aria-label="Поиск чатов" /></label>
+              <div class="chat-items" id="chat-items"><div class="empty-state">Пока нет чатов.</div></div>
+            </aside>
+            <section class="conversation" id="conversation" aria-label="Переписка">
+              <div class="conversation-placeholder" id="conversation-placeholder">Выбери чат.</div>
+              <div class="conversation-content" id="conversation-content" hidden>
+                <header class="conversation-header">
+                  <span class="avatar chat-header-avatar" id="chat-header-avatar">V</span>
+                  <div><strong id="chat-header-name"></strong><small id="chat-header-nickname"></small></div>
+                </header>
+                <div class="messages" id="chat-messages" aria-live="polite"></div>
+                <form class="message-form" id="chat-message-form">
+                  <input id="chat-message-input" name="message" maxlength="4000" autocomplete="off" placeholder="Напиши сообщение…" aria-label="Текст сообщения" required />
+                  <button class="send-button" type="submit" aria-label="Отправить сообщение">➤</button>
+                </form>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view-panel" data-panel="friends">
+          <div class="page-heading"><div><span class="eyebrow">ТВОЙ КРУГ</span><h1>Друзья</h1></div><button class="outline-button" id="find-friends-button" type="button">Найти друзей</button></div>
+          <div class="card friend-toolbar"><strong>Пользователи Крутое название <span class="subtle-count" id="registered-users-count">0</span></strong><span id="friends-status">Загружаем пользователей…</span></div>
+          <div class="people-grid" id="registered-users-list"></div>
+        </section>
+
+        <section class="view-panel" data-panel="user-profile">
+          <div class="page-heading"><div><span class="eyebrow">ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ</span><h1>Профиль</h1></div><button class="outline-button" id="user-profile-back" type="button">К списку пользователей</button></div>
+          <article class="card public-profile-card">
+            <span class="avatar public-profile-avatar" id="public-profile-avatar" aria-label="Фото пользователя">V</span>
+            <div class="public-profile-identity"><h2 id="public-profile-name"></h2><p id="public-profile-nickname"></p></div>
+            <div class="public-profile-actions">
+              <button class="primary-button" id="public-profile-message" type="button">Сообщение</button>
+              <button class="primary-button" id="public-profile-friend-action" type="button"></button>
+              <button class="block-user-button" id="public-profile-block" type="button">Заблокировать</button>
+            </div>
+          </article>
+        </section>
+
+        <section class="view-panel" data-panel="communities">
+          <div class="page-heading"><div><span class="eyebrow">ИНТЕРЕСЫ ОБЪЕДИНЯЮТ</span><h1>Сообщества</h1></div><button class="outline-button" type="button" data-notice="Создание сообщества скоро появится.">＋ Создать</button></div>
+          <label class="card community-search"><span>⌕</span><input id="community-search" type="search" placeholder="Поиск сообществ" aria-label="Поиск сообществ" /></label>
+          <div class="community-list">
+            <div class="card empty-state">Пока нет сообществ. Здесь появятся твои сообщества.</div>
+          </div>
+        </section>
+
+        <section class="view-panel" data-panel="music">
+          <div class="page-heading"><div><span class="eyebrow">ТВОЙ ЗВУК</span><h1>Музыка</h1></div><button class="outline-button" type="button" data-notice="Загрузка музыки пока недоступна.">＋ Добавить музыку</button></div>
+          <article class="music-hero"><div><span class="eyebrow">ПОДБОРКА ДЛЯ ТЕБЯ</span><h2>Поймай свой ритм</h2><p>Немного музыки для хорошего дня.</p><button class="light-button" type="button" data-play-all>▶ Слушать подборку</button></div><div class="music-orb">♫</div></article>
+          <div class="card tracks-card"><div class="card-heading"><h2>Популярное</h2><span class="subtle-count">Подборка Крутое название</span></div>
+            <ul class="track-list" id="track-list"><li class="empty-state">Пока нет треков. Когда треки появятся, они будут здесь.</li></ul>
+          </div>
+          <div class="music-player"><button class="player-button" id="player-toggle" type="button" aria-label="Воспроизвести">▶</button><div class="player-track"><strong id="now-playing">Выбери трек</strong><div class="progress"><span id="progress-bar"></span></div></div><span class="player-time">0:00</span><span class="volume-mark">◖))</span></div>
+        </section>
+        <dialog class="profile-edit-dialog" id="profile-edit-dialog" aria-labelledby="profile-edit-title">
+          <div class="profile-edit-dialog-heading">
+            <div><span class="eyebrow">НАСТРОЙКИ ПРОФИЛЯ</span><h2 id="profile-edit-title">Редактировать профиль</h2></div>
+            <button class="square-button" id="profile-edit-close" type="button" aria-label="Закрыть">×</button>
+          </div>
+          <form id="profile-edit-form">
+            <label class="profile-edit-field">Имя<input id="profile-first-name" name="firstName" type="text" maxlength="50" autocomplete="given-name" required /></label>
+            <label class="profile-edit-field">Фамилия<input id="profile-last-name" name="lastName" type="text" maxlength="50" autocomplete="family-name" required /></label>
+            <label class="profile-edit-field">Короткое имя<input id="profile-nickname" name="nickname" type="text" minlength="3" maxlength="24" pattern="[A-Za-zА-Яа-яЁё0-9_]{3,24}" autocomplete="username" aria-describedby="profile-nickname-hint" required /><small id="profile-nickname-hint">От 3 до 24 символов: буквы, цифры и знак подчёркивания.</small></label>
+            <div class="profile-edit-actions">
+              <button class="outline-button" id="profile-photo-button" type="button">Изменить фото</button>
+              <button class="primary-button" id="profile-edit-save" type="submit">Сохранить изменения</button>
+            </div>
+            <p class="profile-edit-message" id="profile-edit-message" role="status" aria-live="polite" hidden></p>
+          </form>
+          <input id="profile-photo-input" class="visually-hidden" type="file" accept="image/*" aria-label="Выбрать фотографию профиля" />
+        </dialog>
+        <div class="toast" id="toast" role="status" aria-live="polite"></div>
+      </main>
+    </div>
+    <div class="auth-status" id="auth-status" role="status" aria-live="polite" hidden></div>
+    <script type="module" src="js/site.js"></script>
+  </body>
+</html>

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Создание аккаунта Крутое название." />
+    <title>Регистрация — Крутое название</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/index.css" />
+    <link rel="stylesheet" href="css/registration.css" />
+  </head>
+  <body>
+    <div class="registration-page">
+      <div class="registration-toast" role="alert" aria-live="assertive" hidden>
+        <span class="registration-toast-message"></span>
+        <button class="registration-toast-close" type="button" aria-label="Закрыть уведомление">×</button>
+      </div>
+      <header class="registration-header">
+        <a class="registration-brand" href="index.html" aria-label="Крутое название — главная">Крутое название</a>
+        <button
+          class="theme-toggle"
+          type="button"
+          aria-label="Включить тёмную тему"
+          title="Включить тёмную тему"
+        >
+          <span class="theme-icon" aria-hidden="true">☾</span>
+        </button>
+      </header>
+
+      <main class="registration-main">
+        <section class="registration-card" aria-labelledby="registration-title">
+          <span class="registration-eyebrow">Присоединяйтесь к Крутое название</span>
+          <h1 id="registration-title">Создать аккаунт</h1>
+          <p class="registration-intro">Создайте аккаунт за несколько простых шагов.</p>
+          <div class="registration-progress" aria-live="polite">
+            <span class="progress-count">Шаг 1 из 3</span>
+            <div class="progress-track"><span class="progress-value"></span></div>
+          </div>
+          <p class="registration-footer">
+            Уже есть аккаунт?
+            <a href="authorization.html" class="primary-btn registration-login-link">Войти</a>
+          </p>
+
+          <form class="registration-form">
+            <fieldset class="registration-step" data-step="0">
+              <legend class="step-title">Как вас зовут?</legend>
+              <label class="form-field">
+                <span>Имя</span>
+                <input name="firstName" type="text" autocomplete="given-name" maxlength="50" required placeholder="Введите имя" />
+              </label>
+              <label class="form-field">
+                <span>Фамилия</span>
+                <input name="lastName" type="text" autocomplete="family-name" maxlength="50" required placeholder="Введите фамилию" />
+              </label>
+              <button class="primary-btn registration-submit step-next" type="button">Продолжить</button>
+            </fieldset>
+
+            <fieldset class="registration-step" data-step="1" hidden disabled>
+              <legend class="step-title">Данные для входа</legend>
+              <label class="form-field">
+                <span>Электронная почта</span>
+                <input name="email" type="email" autocomplete="email" required placeholder="name@example.com" />
+              </label>
+              <label class="form-field">
+                <span>Пароль</span>
+                <input name="password" type="password" autocomplete="new-password" minlength="8" required placeholder="Не менее 8 символов" />
+              </label>
+              <div class="step-actions">
+                <button class="secondary-btn step-back" type="button">Назад</button>
+                <button class="primary-btn registration-submit step-next" type="button">Далее</button>
+              </div>
+            </fieldset>
+
+            <fieldset class="registration-step" data-step="2" hidden disabled>
+              <legend class="step-title">Настройте профиль</legend>
+              <label class="form-field">
+                <span>Короткое имя (псевдоним)</span>
+                <input name="nickname" type="text" autocomplete="nickname" minlength="3" maxlength="24" pattern="[A-Za-zА-Яа-яЁё0-9_]+" required placeholder="Например, neonov" />
+                <small>От 3 до 24 символов: буквы, цифры и знак подчёркивания.</small>
+              </label>
+              <div class="form-field">
+                <span>Фотография профиля <span class="optional-label">необязательно</span></span>
+                <label class="photo-picker">
+                  <input name="avatar" type="file" accept="image/*" />
+                  <span class="photo-preview" aria-hidden="true">+</span>
+                  <span class="photo-picker-text">Добавить фотографию</span>
+                </label>
+                <small>Фото сохраняется в профиле. Максимальный размер — 5 МБ.</small>
+              </div>
+              <div class="step-actions">
+                <button class="secondary-btn step-back" type="button">Назад</button>
+                <button class="primary-btn registration-submit" type="submit">Завершить регистрацию</button>
+              </div>
+            </fieldset>
+            <p class="form-message" role="status" aria-live="polite"></p>
+          </form>
+
+            <a class="registration-home-link" href="index.html">Вернуться на главную</a>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="js/registration.js"></script>
+  </body>
+</html>

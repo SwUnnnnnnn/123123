@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Крутое название</title>
+    <meta
+      name="description"
+      content="Социальный мессенджер, объединяющий чаты, сообщества и безопасную коммуникацию в одном приложении."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/index.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar">
+        <div class="container nav nav--clean">
+          <div class="nav-spacer" aria-hidden="true"></div>
+
+          <nav class="site-nav" aria-label="Основная навигация">
+            <a href="index.html" aria-current="page">Главная</a>
+            <a href="FAQ.html">FAQ</a>
+            <a href="#applications">Приложения</a>
+          </nav>
+          <div class="nav-actions">
+            <a class="primary-btn" href="authorization.html">Войти</a>
+            <a class="primary-btn" href="registration.html">Регистрация</a>
+            <button class="theme-toggle" type="button" aria-label="Включить тёмную тему" title="Включить тёмную тему">
+              <span class="theme-icon" aria-hidden="true">☾</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main class="main-blank" aria-label="Главный экран платформ">
+        <section class="platform-showcase" id="applications" aria-label="Кнопки загрузки для платформ">
+          <div class="platform-grid">
+            <a class="device-item device-link android-item" id="android" href="#" data-download-url="" aria-label="Скачать Крутое название для Android">
+              <div class="phone-shell">
+                <div class="phone-notch"></div>
+                <div class="phone-screen">
+                  <div class="screen-header">
+                    <span class="avatar-mini"></span>
+                    <span class="header-title">Крутое название</span>
+                    <span class="header-actions">⌕</span>
+                  </div>
+
+                  <div class="chat-list">
+                    <div class="chat-row active-row">
+                      <div class="chat-avatar dark">А</div>
+                      <div class="chat-text">
+                        <div class="chat-meta"><strong>Алиса</strong><span>2:30</span></div>
+                        <p>Давай созвонимся?</p>
+                      </div>
+                    </div>
+
+                    <div class="chat-row">
+                      <div class="chat-avatar light">Р</div>
+                      <div class="chat-text">
+                        <div class="chat-meta"><strong>Степан</strong><span>11:42</span></div>
+                        <p>Всё отлично, спасибо!</p>
+                      </div>
+                    </div>
+
+                    <div class="chat-row">
+                      <div class="chat-avatar blue">Д</div>
+                      <div class="chat-text">
+                        <div class="chat-meta"><strong>Иван</strong><span>10:15</span></div>
+                        <p>Отправил файлы в чат.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="composer">
+                    <span>Сообщение</span>
+                    <span class="send-btn">➤</span>
+                  </div>
+                </div>
+              </div>
+                <div class="platform-label">
+                <span class="platform-icon">◉</span>
+                <span>Крутое название для Android</span>
+              </div>
+            </a>
+
+            <a class="device-item device-link pc-item" id="pc" href="#" data-download-url="" aria-label="Скачать Крутое название для компьютера">
+              <div class="pc-shell">
+                <div class="pc-screen">
+                  <div class="pc-topbar">
+                    <span class="pc-dot"></span>
+                    <span class="pc-dot"></span>
+                    <span class="pc-dot"></span>
+                  </div>
+                  <div class="pc-window">
+                    <div class="pc-chat-panel">
+                      <div class="pc-chat-header">Крутое название</div>
+                      <div class="pc-message me">Привет! Новый релиз уже в работе.</div>
+                      <div class="pc-message other">Отлично, я уже проверяю.</div>
+                      <div class="pc-message me">Скоро пришлю финальную сборку.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="platform-label">
+                <span class="platform-icon">◉</span>
+                <span>Крутое название для PC</span>
+              </div>
+            </a>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer" id="about">
+        <div class="container footer-layout">
+          <div class="footer-about">
+            <strong class="footer-title">Крутое название</strong>
+            <p>Крутое название — это мессенджер для мобильных устройств и компьютеров. Быстрый, безопасный и максимально анонимный.</p>
+          </div>
+          <nav class="footer-column" aria-label="О Крутое название">
+            <h2>О Крутое название</h2>
+            <a href="FAQ.html">FAQ</a>
+          </nav>
+          <nav class="footer-column" aria-label="Для мобильных устройств">
+            <h2>Для мобильных</h2>
+            <a href="#android">Android</a>
+          </nav>
+          <nav class="footer-column" aria-label="Для компьютера">
+            <h2>Для компьютера</h2>
+            <a href="#pc">Версия для ПК</a>
+          </nav>
+
+          <div class="footer-meta">
+            <span class="copy">© 2026 Крутое название</span>
+            <span class="developer-mark">develop by neonov</span>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <script src="js/index.js"></script>
+  </body>
+</html>

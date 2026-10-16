@@ -1,0 +1,32 @@
+.schedule-return {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--schedule-ink, var(--text, var(--ink, #22243a))) 18%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--schedule-ink, var(--text, var(--ink, #22243a))) 5%, transparent);
+  color: var(--schedule-ink, var(--text, var(--ink, #22243a)));
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 0.16s ease, border-color 0.16s ease;
+}
+
+.schedule-return:hover,
+.schedule-return:focus-visible {
+  border-color: color-mix(in srgb, var(--schedule-ink, var(--text, var(--ink, #22243a))) 32%, transparent);
+  background: color-mix(in srgb, var(--schedule-ink, var(--text, var(--ink, #22243a))) 10%, transparent);
+}
+
+@media (max-width: 720px) {
+  .schedule-return {
+    min-height: 30px;
+    padding: 5px 8px;
+    font-size: 0.66rem;
+  }
+}

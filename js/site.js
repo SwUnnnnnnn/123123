@@ -24,7 +24,7 @@ const savedAccent = localStorage.getItem('vkt-accent');
 const initialAccent = /^#[0-9a-f]{6}$/i.test(savedAccent || '') ? savedAccent : defaultAccent;
 document.documentElement.dataset.theme = initialTheme;
 
-const navItems = [...document.querySelectorAll('.nav-item[data-view]')];
+const navItems = [...document.querySelectorAll('.nav-item[data-view], .mobile-nav-item[data-view]')];
 const panels = [...document.querySelectorAll('.view-panel[data-panel]')];
 const mobileView = document.querySelector('#mobile-view');
 const musicTransport = document.querySelector('#music-transport');
@@ -45,6 +45,8 @@ const chatItems = document.querySelector('#chat-items');
 const chatSearch = document.querySelector('#chat-search');
 const chatListTitle = document.querySelector('#chat-list-title');
 const archiveToggle = document.querySelector('#archive-toggle');
+const messenger = document.querySelector('.messenger');
+const mobileChatBackButton = document.querySelector('#mobile-chat-back');
 const conversationPlaceholder = document.querySelector('#conversation-placeholder');
 const conversationContent = document.querySelector('#conversation-content');
 const chatMessages = document.querySelector('#chat-messages');
@@ -349,6 +351,7 @@ async function handleChatMenuAction(chatId, action) {
   if (action === 'delete' && await saveChatSettings(chatId, { hidden: true })) {
     if (selectedChatId === chatId) {
       selectedChatId = '';
+      messenger.classList.remove('has-selected-chat');
       stopWatchingMessages?.();
       conversationContent.hidden = true;
       conversationPlaceholder.hidden = false;
@@ -585,6 +588,7 @@ async function openChatWithProfile(profile) {
 function selectChat(chat) {
   const chatChanged = selectedChatId !== chat.id;
   selectedChatId = chat.id;
+  messenger.classList.add('has-selected-chat');
   chatEmojiPicker.hidden = true;
   chatEmojiToggle.setAttribute('aria-expanded', 'false');
   showView('messages');
@@ -1085,6 +1089,7 @@ function watchSocialData(user) {
   currentChatSettings.clear();
   blockedUserIds.clear();
   selectedChatId = '';
+  messenger.classList.remove('has-selected-chat');
   conversationPlaceholder.hidden = false;
   conversationContent.hidden = true;
   friendRequestStates.clear();
@@ -1173,6 +1178,7 @@ function watchSocialData(user) {
         if (updatedChat) selectChat(updatedChat);
         else {
           selectedChatId = '';
+          messenger.classList.remove('has-selected-chat');
           stopWatchingMessages?.();
           conversationContent.hidden = true;
           conversationPlaceholder.hidden = false;
@@ -1353,6 +1359,14 @@ document.addEventListener('keydown', (event) => {
 
 navItems.forEach((item) => item.addEventListener('click', () => showView(item.dataset.view)));
 mobileView?.addEventListener('change', () => showView(mobileView.value));
+mobileChatBackButton.addEventListener('click', () => {
+  messenger.classList.remove('has-selected-chat');
+  conversationContent.hidden = true;
+  conversationPlaceholder.hidden = false;
+  selectedChatId = '';
+  stopWatchingMessages?.();
+  mobileChatBackButton.blur();
+});
 findFriendsButton?.addEventListener('click', () => {
   showView('friends');
   const firstAction = registeredUsersList.querySelector('.friend-action:not(:disabled)');
@@ -1386,6 +1400,7 @@ profileBlockButton?.addEventListener('click', async () => {
       const chatId = getChatId(currentUser.uid, targetId);
       if (socialChats.some((chat) => chat.id === chatId)) {
         selectedChatId = '';
+        messenger.classList.remove('has-selected-chat');
         stopWatchingMessages?.();
         conversationContent.hidden = true;
         conversationPlaceholder.hidden = false;

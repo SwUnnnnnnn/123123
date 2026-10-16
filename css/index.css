@@ -411,6 +411,7 @@ button {
 
 .nav {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   min-height: 80px;
@@ -1260,6 +1261,14 @@ html[data-theme="dark"] .footer-column a {
   .nav {
     gap: 12px;
     justify-content: space-between;
+  }
+
+  .nav-actions {
+    margin-left: auto;
+    max-width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
   }
 
   .site-nav {
